@@ -1,4 +1,5 @@
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 import crud
 
@@ -8,56 +9,104 @@ def handle_dialog(data: dict, db: Session):
     input_text = data['request'].get('original_utterance', '').lower().strip()
     is_new = data['session']['new']
 
-    # Кнопки для быстрого доступа
-    buttons = ["Что я записал сегодня?", "Удали последнюю", "Помощь"]
+    # ПОЛНЫЙ НАБОР КНОПОК ПОД ВСЕ ФУНКЦИИ
+    buttons = [
+        "Что я записал сегодня?",
+        "Показать все записи",
+        "Что было вчера?",
+        "Удалить по номеру",
+        "Удали последнюю",
+        "Помощь"
+    ]
 
-    # 1. Приветствие
-    if is_new:
-        return "Привет! Я твой голосовой дневник. Что запишем или вспомним?", buttons
+    # Список слов-триггеров для вызова помощи
+    welcome_commands = ["привет", "старт", "начни", "начать", "помощь", "что ты умеешь", "команды"]
 
-    # 2. Подробная справка по командам
-    if "помощь" in input_text or "что ты умеешь" in input_text or "команды" in input_text:
+    # 1. Если это новый сеанс или юзер поздоровался/попросил помощь
+    if is_new or any(word in input_text for word in welcome_commands):
         help_msg = (
-            "Вот что я понимаю:\n\n"
-            "1. Запись: Просто скажи фразу, например: 'Запиши сегодня отличная погода'.\n"
-            "2. Просмотр: 'Что я записал сегодня?' или 'Прочитай мои записи'.\n"
-            "3. Удаление: 'Удали последнюю запись' — если совершил ошибку.\n"
-            "4. Выход: 'Хватит' или 'Выход', чтобы закончить работу.\n\n"
-            "Что попробуем?"
+            "Привет! Я твой голосовой дневник. Вот мои команды:\n\n"
+            "• Записать: просто диктуй текст.\n"
+            "• Сегодня: 'Что я записал сегодня?'.\n"
+            "• Вчера: 'Что я писал вчера?'.\n"
+            "• История: 'Покажи все записи' (последние 10).\n"
+            "• Удалить конкретную: 'Удали вторую запись'.\n"
+            "• Стереть последнюю: 'Удали последнюю'.\n\n"
+            "Что сделаем?"
         )
         return help_msg, buttons
 
-    # 3. Удаление
+    # 2. Обработка кнопки "Удалить по номеру" (инструкция)
+    if "удалить по номеру" in input_text:
+        return ("Чтобы удалить конкретную запись, сначала посмотри список за сегодня, "
+                "а потом скажи: 'Удали номер 2' или 'Удали пятую'."), buttons
+
+    # 3. Логика удаления (по номеру или последней)
     if "удали" in input_text:
+        numbers = re.findall(r'\d+', input_text)
+        ordinals = {"перв": 0, "втор": 1, "трет": 2, "четверт": 3, "пят": 4, "шест": 5}
+        found_idx = None
+
+        for word, idx in ordinals.items():
+            if word in input_text:
+                found_idx = idx
+                break
+
+        if numbers:
+            found_idx = int(numbers[0]) - 1
+
+        if found_idx is not None:
+            deleted = crud.delete_note_by_index(db, user_id, found_idx)
+            if deleted:
+                return f"Удалила запись №{found_idx + 1}: '{deleted.content}'", buttons
+            return f"Записи под номером {found_idx + 1} сегодня нет в списке.", buttons
+
         deleted = crud.delete_last_note(db, user_id)
         if deleted:
-            return f"Окей, я стерла запись: '{deleted.content}'", buttons
+            return f"Сделано! Удалила последнюю запись: '{deleted.content}'", buttons
         return "В дневнике пока пусто, удалять нечего.", buttons
 
-    # 4. Просмотр записей за сегодня
-    if "что" in input_text and ("сегодня" in input_text or "записал" in input_text or "записи" in input_text):
+    # 4. Просмотр за ВСЁ время (ВАЖНО: выше записи текста)
+    if "все" in input_text and ("записи" in input_text or "покажи" in input_text):
+        notes = crud.get_all_notes(db, user_id, limit=10)
+        if notes:
+            formatted_notes = []
+            # Показываем в обратном порядке (от старых к новым для списка)
+            for i, n in enumerate(reversed(notes)):
+                date_str = n.created_at.strftime("%d.%m %H:%M")
+                formatted_notes.append(f"{i + 1}. [{date_str}] {n.content}")
+            res = "Последние 10 записей:\n" + "\n".join(formatted_notes)
+            return res, buttons
+        return "В дневнике пока совсем пусто.", buttons
+
+    # 5. Просмотр за ВЧЕРА
+    if "вчера" in input_text:
+        yesterday = datetime.now() - timedelta(days=1)
+        notes = crud.get_notes_by_date(db, user_id, yesterday)
+        if notes:
+            formatted_notes = [f"• [{n.created_at.strftime('%H:%M')}] {n.content}" for n in notes]
+            res = "Твои вчерашние записи:\n" + "\n".join(formatted_notes)
+            return res, buttons
+        return "Вчера ты ничего не записывал.", buttons
+
+    # 6. Просмотр записей за сегодня
+    if "что" in input_text and ("сегодня" in input_text or "записал" in input_text):
         notes = crud.get_notes_by_date(db, user_id, datetime.now())
         if notes:
-            # Формируем список: [10:30] Текст заметки
             formatted_notes = []
-            for n in notes:
-                # Берём только часы и минуты из даты
+            for i, n in enumerate(notes):
                 time_str = n.created_at.strftime("%H:%M")
-                formatted_notes.append(f"• [{time_str}] {n.content}")
-
+                formatted_notes.append(f"{i + 1}. [{time_str}] {n.content}")
             res = "Твои записи за сегодня:\n" + "\n".join(formatted_notes)
             return res, buttons
-        return "За сегодня записей пока нет. Хочешь что-нибудь добавить?", buttons
+        return "За сегодня записей пока нет. Продиктуй что-нибудь!", buttons
 
-    # 5. Сохранение заметки
+    # 7. Запись новой заметки (Самый последний блок)
     if input_text:
-        # Убираем лишнее слово 'запиши', если пользователь его использовал
         clean_text = input_text.replace("запиши", "").strip()
-
         if not clean_text:
-            return "Я готова записать, но ты ничего не продиктовал. Что внести в дневник?", buttons
-
+            return "Я слушаю. Что именно записать в дневник?", buttons
         crud.create_note(db, user_id, clean_text)
-        return f"Поняла, записала: {clean_text}", buttons
+        return f"Записала: {clean_text}", buttons
 
-    return "Не совсем поняла тебя. Попробуй сказать 'Помощь'.", buttons
+    return "Не совсем поняла тебя. Скажи 'Помощь', и я подскажу команды.", buttons
