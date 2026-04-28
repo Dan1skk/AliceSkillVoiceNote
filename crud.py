@@ -24,11 +24,9 @@ def delete_last_note(db: Session, user_id: str):
 
 
 def delete_note_by_index(db: Session, user_id: str, index: int):
-    # Получаем начало и конец текущего дня
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     tomorrow = today + timedelta(days=1)
 
-    # Берем записи за сегодня в хронологическом порядке
     notes = db.query(Note).filter(
         Note.user_id == user_id,
         Note.created_at >= today,
@@ -43,11 +41,9 @@ def delete_note_by_index(db: Session, user_id: str, index: int):
     return None
 
 def get_all_notes(db: Session, user_id: str, limit: int = 10):
-    # Возвращает последние N записей за всё время
     return db.query(Note).filter(Note.user_id == user_id).order_by(Note.created_at.desc()).limit(limit).all()
 
 def get_notes_by_specific_date(db: Session, user_id: str, date_str: str):
-    # Поиск по строке даты (например, "2023-10-25")
     try:
         search_date = datetime.strptime(date_str, "%Y-%m-%d")
         start = search_date.replace(hour=0, minute=0, second=0)

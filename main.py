@@ -11,7 +11,6 @@ app = FastAPI()
 async def webhook(request: Request, db: Session = Depends(get_db)):
     data = await request.json()
 
-    # Теперь handle_dialog возвращает кортеж (текст, кнопки)
     response_text, buttons = handle_dialog(data, db)
 
     return {
