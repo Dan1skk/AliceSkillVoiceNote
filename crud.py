@@ -20,4 +20,4 @@ def delete_last_note(db: Session, user_id: str):
         db.delete(note)
         db.commit()
         return note
-    return None
+    return None 
