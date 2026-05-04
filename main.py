@@ -2,28 +2,38 @@ from fastapi import FastAPI, Request, Depends
 from sqlalchemy.orm import Session
 from database import SessionLocal, engine, Base, get_db
 from api import handle_dialog
+import uvicorn
 
 Base.metadata.create_all(bind=engine)
-app = FastAPI()
 
+app = FastAPI()
 
 @app.post("/webhook")
 async def webhook(request: Request, db: Session = Depends(get_db)):
     data = await request.json()
 
-    response_text, buttons = handle_dialog(data, db)
+    response_text, buttons, image_id = handle_dialog(data, db)
+
+    response_body = {
+        "text": response_text,
+        "tts": response_text,  # Озвучка текста голосом Алисы
+        "buttons": [{"title": b, "hide": True} for b in buttons],
+        "end_session": False
+    }
+
+    if image_id:
+        response_body["card"] = {
+            "type": "BigImage",
+            "image_id": image_id,
+            "title": "Твой Голосовой Дневник",
+            "description": response_text
+        }
 
     return {
-        "response": {
-            "text": response_text,
-            "buttons": [{"title": b, "hide": True} for b in buttons],
-            "end_session": False
-        },
+        "response": response_body,
         "version": "1.0"
     }
 
-
 if __name__ == "__main__":
-    import uvicorn
-
+    # Запуск сервера на порту 8000
     uvicorn.run(app, host="0.0.0.0", port=8000)
