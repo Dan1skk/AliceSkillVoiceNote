@@ -4,10 +4,11 @@ import requests
 def get_weather(city):
     api_key = "83da0a8aee21fc895d87a038591d49af"
     try:
+        # Запрос к OpenWeatherMap с метрическими единицами и русским языком
         url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&units=metric&lang=ru"
         response = requests.get(url, timeout=5)
         print(f"DEBUG: Weather Status Code: {response.status_code}")
-        print(f"DEBUG: Response Body: {response.text}")  # И эту
+        print(f"DEBUG: Response Body: {response.text}")
 
         if response.status_code == 200:
             data = response.json()

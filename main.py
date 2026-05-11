@@ -4,6 +4,7 @@ from database import SessionLocal, engine, Base, get_db
 from api import handle_dialog
 import uvicorn
 
+# Создаём таблицы при старте приложения
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
@@ -14,6 +15,7 @@ async def webhook(request: Request, db: Session = Depends(get_db)):
 
     response_text, buttons, image_id = handle_dialog(data, db)
 
+    # Формируем тело ответа для Алисы
     response_body = {
         "text": response_text,
         "tts": response_text,  # Озвучка текста голосом Алисы
@@ -21,6 +23,7 @@ async def webhook(request: Request, db: Session = Depends(get_db)):
         "end_session": False
     }
 
+    # Добавляем карточку с изображением, если передан image_id
     if image_id:
         response_body["card"] = {
             "type": "BigImage",

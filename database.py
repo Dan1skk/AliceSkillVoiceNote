@@ -4,10 +4,12 @@ from sqlalchemy.orm import sessionmaker
 
 DATABASE_URL = "sqlite:///./diary.db"
 
+# Подключение к SQLite БД
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+# Генератор сессии для dependency injection в FastAPI
 def get_db():
     db = SessionLocal()
     try:
