@@ -6,7 +6,7 @@ import uvicorn
 
 # Создаём таблицы при старте приложения
 Base.metadata.create_all(bind=engine)
-
+#qwe
 app = FastAPI()
 
 @app.post("/webhook")
